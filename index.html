@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>〈어떻게 해야 했을까?〉 좌석 배정</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF0F4; --surface:#FFFFFF; --surface2:#F6F7FA; --ink:#1B2233; --ink2:#5A6275; --line:#D5D9E2;
+  --seat:#FFFFFF; --seat-line:#B9BFCC; --seat-ink:#1B2233;
+  --taken:#1B2233; --taken-ink:#FFFFFF;
+  --mine:#C8102E; --mine-ink:#FFFFFF; --mine-soft:#FBE3E6;
+  --ok:#1E7F4F; --ok-soft:#DFF3E7; --warn:#A35B00; --warn-soft:#FFF0D6;
+  --screen:#1B2233; --shadow:0 1px 0 rgba(27,34,51,.06), 0 8px 24px -12px rgba(27,34,51,.25);
+  --focus:#2B6BE4;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+input,select{font:inherit;color:inherit}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+
+.wrap{max-width:1100px;margin:0 auto;padding:16px 14px 80px}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:6px 2px 14px}
+header h1{margin:0;font-size:21px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
+header .sub{margin:3px 0 0;color:var(--ink2);font-size:13.5px}
+.count{display:flex;align-items:baseline;gap:6px;font-variant-numeric:tabular-nums}
+.count b{font-size:34px;font-weight:700;line-height:1;letter-spacing:-.02em}
+.count span{color:var(--ink2);font-size:13.5px}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2);margin-top:5px}
+.status i{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;flex:none}
+.status.wait i{background:var(--warn)}
+.status.err i{background:var(--mine)}
+
+.topbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.tabs{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:4px;width:max-content}
+.tabs button{padding:8px 16px;border-radius:9px;font-weight:600;color:var(--ink2)}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.spacer{flex:1}
+
+.grid{display:grid;grid-template-columns:1fr;gap:16px}
+@media (min-width:900px){.grid{grid-template-columns:370px 1fr;align-items:start}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+
+.search{position:relative}
+.search input{width:100%;padding:14px 44px 14px 16px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface2);font-size:17px}
+.search .clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:8px;color:var(--ink2);font-size:18px;display:none;align-items:center;justify-content:center}
+.search .clear.show{display:flex}
+.results{margin-top:8px;border:1px solid var(--line);border-radius:12px;overflow:hidden;max-height:300px;overflow-y:auto;display:none;background:var(--surface)}
+.results.show{display:block}
+.results button{display:flex;width:100%;text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);gap:10px;align-items:center}
+.results button:last-child{border-bottom:0}
+.results button:hover,.results button.hl{background:var(--surface2)}
+.results .n{font-weight:600;min-width:64px}
+.results .o{color:var(--ink2);font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.results .s{font-size:12.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);color:var(--ink2);white-space:nowrap}
+.results .s.has{background:var(--mine-soft);color:var(--mine);border-color:transparent}
+.results .empty{padding:14px;color:var(--ink2);font-size:14px}
+.results .empty button{display:inline;width:auto;padding:0;border:0;color:var(--focus);font-weight:600;margin-left:6px}
+
+.person{margin-top:14px;padding:14px 16px;border-radius:14px;background:var(--surface2);border:1px solid var(--line)}
+.person .who{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.person .name{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.person .org{color:var(--ink2);font-size:13.5px;margin-top:1px}
+.tag{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--ink2);white-space:nowrap}
+.tag.g회원{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.tag.g넥스트케어{background:#E4ECFA;color:#2B54A8;border-color:transparent}
+.tag.g사무처,.tag.g정책위원회,.tag.g현장{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.seatline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+.seatline .lbl{font-size:13px;color:var(--ink2)}
+.seatline .val{font-size:26px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.seatline .val.none{font-size:15px;font-weight:500;color:var(--ink2)}
+.hint{margin-top:10px;font-size:13.5px;color:var(--ink2);padding:9px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
+.hint.act{color:var(--mine);border-color:var(--mine);background:var(--mine-soft)}
+.actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn{padding:10px 14px;border-radius:10px;font-weight:600;font-size:14px;border:1.5px solid var(--line);background:var(--surface)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.danger{color:var(--mine);border-color:var(--mine)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.sm{padding:6px 10px;font-size:13px}
+.btn.ghost{border-color:transparent;color:var(--ink2)}
+
+.hall{padding:18px 10px 16px}
+.screen{height:10px;border-radius:4px;background:var(--screen);margin:0 8% 6px;opacity:.9}
+.screen-l{text-align:center;font-size:12px;color:var(--ink2);letter-spacing:.08em;margin-bottom:18px}
+.rows{display:grid;gap:7px;width:100%;max-width:560px;margin:0 auto}
+.row{display:grid;grid-template-columns:repeat(6,1fr) 30px repeat(6,1fr);gap:5px;align-items:center}
+.rl{text-align:center;font-weight:700;font-size:14px;color:var(--ink2)}
+.seat{aspect-ratio:1/1;min-width:0;border-radius:7px 7px 4px 4px;border:1.5px solid var(--seat-line);background:var(--seat);color:var(--seat-ink);font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:center;position:relative;transition:transform .08s ease;font-variant-numeric:tabular-nums}
+.seat:hover{transform:translateY(-1px)}
+.seat.taken{background:var(--taken);color:var(--taken-ink);border-color:var(--taken)}
+.seat.mine{background:var(--mine);color:var(--mine-ink);border-color:var(--mine);box-shadow:0 0 0 3px var(--mine-soft)}
+.seat.pickable{border-color:var(--mine);border-style:dashed;opacity:.85}
+.seat.pickable:hover{background:var(--mine-soft);opacity:1}
+.seat.ghost{visibility:hidden}
+.seat .nm{position:absolute;inset:auto 0 0;font-size:8.5px;font-weight:500;line-height:1;opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px 2px;display:none}
+.hall.names .seat.taken .nm,.hall.names .seat.mine .nm{display:block}
+.hall.names .seat.taken,.hall.names .seat.mine{align-items:flex-start;padding-top:3px;font-size:11px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:16px;font-size:12.5px;color:var(--ink2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:14px;height:14px;border-radius:4px 4px 2px 2px;border:1.5px solid var(--seat-line);background:var(--seat);display:inline-block}
+.legend i.t{background:var(--taken);border-color:var(--taken)}
+.legend i.m{background:var(--mine);border-color:var(--mine)}
+.legend i.p{border-color:var(--mine);border-style:dashed}
+.hall-tools{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.hall-tools label{font-size:13px;color:var(--ink2);display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+.exits{display:flex;justify-content:flex-end;font-size:11px;color:var(--ink2);margin:8px 8% 0}
+
+.list-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.chip{padding:6px 12px;border-radius:999px;border:1.5px solid var(--line);font-size:13px;font-weight:600;color:var(--ink2)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12.5px;color:var(--ink2);font-weight:600;position:sticky;top:0;background:var(--surface);z-index:1}
+td.seatc{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.seatc.none{color:var(--ink2);font-weight:500}
+td .org{color:var(--ink2);font-size:12.5px;display:block}
+td.tools{white-space:nowrap;text-align:right}
+td.tools .btn{margin-left:4px}
+tr.clk td:not(.tools){cursor:pointer}
+tr.clk:hover td{background:var(--surface2)}
+.tscroll{overflow-x:auto;max-height:64vh;overflow-y:auto;border:1px solid var(--line);border-radius:12px}
+
+.modal{position:fixed;inset:0;background:rgba(10,14,22,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+.modal.show{display:flex}
+.dlg{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px;width:100%;max-width:440px;box-shadow:0 30px 80px -20px rgba(0,0,0,.5)}
+.dlg h2{margin:0 0 6px;font-size:18px;font-weight:700}
+.dlg p{margin:0 0 4px;color:var(--ink2);font-size:14.5px}
+.dlg .big{font-size:40px;font-weight:700;letter-spacing:-.03em;margin:8px 0 2px;font-variant-numeric:tabular-nums}
+.dlg .actions{justify-content:flex-end;margin-top:18px}
+.dlg label{display:block;font-size:12.5px;color:var(--ink2);margin-top:12px;font-weight:600}
+.dlg input,.dlg select{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface2);margin-top:5px}
+.ticket{border:2px dashed var(--line);border-radius:14px;padding:16px;text-align:center;margin-top:8px;background:var(--surface2)}
+.ticket .t1{font-size:13px;color:var(--ink2)}
+.ticket .t2{font-size:22px;font-weight:700;margin:2px 0}
+.ticket .t3{font-size:48px;font-weight:700;letter-spacing:-.03em;color:var(--mine);line-height:1.1}
+.ticket .t4{font-size:13px;color:var(--ink2);margin-top:6px}
+
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-size:14px;font-weight:600;opacity:0;transition:all .18s ease;z-index:60;max-width:92vw;text-align:center;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.banner{margin-bottom:12px;padding:10px 14px;border-radius:12px;background:var(--warn-soft);color:var(--warn);font-size:13.5px;display:none}
+.banner.show{display:block}
+.foot{margin-top:18px;display:flex;justify-content:flex-end;gap:14px;flex-wrap:wrap}
+.foot button{font-size:12.5px;color:var(--ink2);text-decoration:underline;padding:4px}
+.blocker{max-width:560px;margin:14vh auto;text-align:center;padding:0 16px}
+.blocker h2{font-size:20px;margin:0 0 8px}
+.blocker p{color:var(--ink2);margin:0 0 18px;word-break:keep-all}
+
+@media (max-width:480px){
+  .hall{padding:14px 6px 14px}.row{grid-template-columns:repeat(6,1fr) 22px repeat(6,1fr);gap:3px}
+  .rows{gap:5px}.seat{font-size:11px;border-radius:5px 5px 3px 3px}.rl{font-size:12px}
+  .wrap{padding:12px 8px 80px}.card{padding:14px 12px}
+  th:nth-child(3),td:nth-child(3){display:none}th,td{padding:8px 6px}
+}
+
+/* ============ 관람객 화면 ============ */
+body.display{background:#0E121B;color:#F2F4F8;overflow:hidden}
+.dwrap{height:100vh;display:grid;grid-template-rows:auto 1fr;padding:2.2vh 3vw;gap:1.6vh}
+.dhead{display:flex;justify-content:space-between;align-items:flex-end;gap:2vw;border-bottom:1px solid #263047;padding-bottom:1.4vh}
+.dhead h1{margin:0;font-size:clamp(20px,2.1vw,34px);font-weight:700;letter-spacing:-.01em}
+.dhead p{margin:.3vh 0 0;color:#8C97AE;font-size:clamp(12px,1vw,17px)}
+.dhead .left{font-variant-numeric:tabular-nums;text-align:right;color:#8C97AE;font-size:clamp(12px,1vw,17px)}
+.dhead .left b{display:block;color:#F2F4F8;font-size:clamp(22px,2.4vw,40px);line-height:1.1;font-weight:700}
+.dbody{display:grid;grid-template-columns:1fr;gap:2vw;align-items:center;min-height:0}
+@media (min-aspect-ratio:13/10){.dbody{grid-template-columns:minmax(0,1fr) 27vw}}
+.dhall{height:100%;min-height:0;display:flex;flex-direction:column;justify-content:center}
+.dscreen{height:1.1vh;border-radius:4px;background:#E6E1D6;margin:0 10% .8vh;opacity:.85}
+.dscreen-l{text-align:center;font-size:clamp(10px,.8vw,14px);color:#8C97AE;letter-spacing:.14em;margin-bottom:2vh}
+.drows{display:grid;gap:1vh;width:100%;max-width:min(92vh,1080px);margin:0 auto}
+.drow{display:grid;grid-template-columns:repeat(6,1fr) 3.4% repeat(6,1fr);gap:.7%;align-items:center}
+.drl{text-align:center;font-weight:700;font-size:clamp(11px,1.1vw,20px);color:#8C97AE}
+.dseat{aspect-ratio:1/1;border-radius:14% 14% 8% 8%;border:2px solid #39455F;background:#1A2233;color:#93A0BA;display:flex;align-items:center;justify-content:center;font-size:clamp(10px,.95vw,18px);font-weight:600;font-variant-numeric:tabular-nums;position:relative;overflow:hidden}
+.dseat.taken{background:#E6E1D6;border-color:#E6E1D6;color:#0E121B}
+.dseat.ghost{visibility:hidden}
+.dseat .dnm{position:absolute;inset:auto 0 4%;font-size:clamp(7px,.6vw,11px);font-weight:500;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 4%;display:none}
+.dhall.names .dseat.taken{align-items:flex-start;padding-top:6%;font-size:clamp(9px,.8vw,15px)}
+.dhall.names .dseat.taken .dnm{display:block}
+.dseat.flash{background:#E5473C;border-color:#E5473C;color:#fff;animation:pop 1.1s ease}
+@keyframes pop{0%{transform:scale(1)}18%{transform:scale(1.22)}100%{transform:scale(1)}}
+.dnow{background:#161C29;border:1px solid #263047;border-radius:20px;padding:3vh 2vw;text-align:center;min-height:0}
+.dnow .k{font-size:clamp(11px,.95vw,16px);color:#8C97AE;letter-spacing:.06em}
+.dnow .who{font-size:clamp(24px,2.8vw,52px);font-weight:700;margin:.6vh 0 .2vh;letter-spacing:-.02em;line-height:1.15;word-break:keep-all}
+.dnow .org{font-size:clamp(12px,1vw,18px);color:#8C97AE;margin-bottom:1.6vh;word-break:keep-all}
+.dnow .st{font-size:clamp(40px,5vw,96px);font-weight:700;color:#E5473C;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.dnow .idle{color:#8C97AE;font-size:clamp(14px,1.2vw,22px);line-height:1.6;word-break:keep-all}
+.dlegend{display:flex;gap:1.6vw;justify-content:center;margin-top:2vh;font-size:clamp(10px,.85vw,15px);color:#8C97AE}
+.dlegend span{display:inline-flex;align-items:center;gap:.5vw}
+.dlegend i{width:1.1em;height:1.1em;border-radius:20%;border:2px solid #39455F;background:#1A2233;display:inline-block}
+.dlegend i.t{background:#E6E1D6;border-color:#E6E1D6}
+.dlegend i.m{background:#E5473C;border-color:#E5473C}
+</style>
+</head>
+<body>
+
+<!-- 명단을 아직 못 읽었을 때 -->
+<div class="blocker" id="blocker" hidden>
+  <h2 id="blkTitle">명단을 불러오는 중입니다</h2>
+  <p id="blkMsg">구글 시트에서 참석자 명단을 읽고 있습니다.</p>
+  <button class="btn primary" id="blkRetry" hidden>다시 시도</button>
+</div>
+
+<!-- ================= 운영자 화면 ================= -->
+<div class="wrap" id="app" hidden>
+  <header>
+    <div>
+      <h1>〈어떻게 해야 했을까?〉 좌석 배정</h1>
+      <p class="sub">9월 17일(목) 19:30 · 메가박스 아트나인 0관 · 92석</p>
+      <div class="status" id="syncStatus"><i></i><span>준비 중</span></div>
+    </div>
+    <div class="count"><b id="cntAssigned">0</b><span>/ <span id="cntTotal">92</span>석 배정 · 남은 좌석 <span id="cntLeft">92</span></span></div>
+  </header>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="topbar">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="map">좌석 배정</button>
+      <button role="tab" aria-selected="false" data-tab="list">참석자 명단 <span id="tabCount"></span></button>
+    </div>
+    <span class="spacer"></span>
+    <button class="btn" id="btnDisplay">관람객 화면 열기</button>
+  </div>
+
+  <section id="tab-map" class="grid">
+    <div class="card">
+      <div class="search">
+        <input id="q" type="search" autocomplete="off" placeholder="참석자 성함 검색" aria-label="참석자 성함 검색">
+        <button class="clear" id="qClear" aria-label="지우기">×</button>
+      </div>
+      <div class="results" id="results" role="listbox"></div>
+
+      <div class="person" id="person" hidden>
+        <div class="who">
+          <div>
+            <div class="name" id="pName"></div>
+            <div class="org" id="pOrg"></div>
+          </div>
+          <span class="tag" id="pTag"></span>
+        </div>
+        <div class="seatline">
+          <span class="lbl">배정 좌석</span>
+          <span class="val" id="pSeat"></span>
+        </div>
+        <div class="hint" id="pHint"></div>
+        <div class="actions">
+          <button class="btn danger" id="btnCancel">배정 취소</button>
+          <button class="btn" id="btnTicket">티켓 보기</button>
+          <button class="btn" id="btnEditPerson">정보 수정</button>
+          <button class="btn ghost" id="btnDeselect">선택 해제</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hall" id="hall">
+      <div class="hall-tools">
+        <span style="font-size:13px;color:var(--ink2)">좌석을 누르면 배정됩니다</span>
+        <label><input type="checkbox" id="showNames"> 이름 표시(관람객 화면 포함)</label>
+      </div>
+      <div class="screen"></div>
+      <div class="screen-l">screen</div>
+      <div class="rows" id="rows"></div>
+      <div class="exits"><span>exit 비상구 →</span></div>
+      <div class="legend">
+        <span><i></i>빈 좌석</span>
+        <span><i class="t"></i>배정됨</span>
+        <span><i class="m"></i>선택한 분의 좌석</span>
+        <span><i class="p"></i>선택 가능</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-list" class="card" hidden>
+    <div class="list-tools">
+      <button class="chip" data-f="all" aria-pressed="true">전체</button>
+      <button class="chip" data-f="assigned" aria-pressed="false">배정 완료</button>
+      <button class="chip" data-f="unassigned" aria-pressed="false">미배정</button>
+      <button class="chip" data-f="회원" aria-pressed="false">회원</button>
+      <button class="chip" data-f="넥스트케어" aria-pressed="false">넥스트케어</button>
+      <button class="chip" data-f="기타" aria-pressed="false">사무처·정책위·현장</button>
+      <span class="spacer"></span>
+      <button class="btn sm primary" id="btnAddPerson">참석자 추가</button>
+      <button class="btn sm" id="btnExport">CSV 내려받기</button>
+    </div>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th style="width:44px">연번</th><th>성함 / 소속</th><th style="width:96px">구분</th><th style="width:92px">좌석</th><th style="width:132px"></th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="foot">
+    <button id="btnPull">시트에서 새로고침</button>
+    <button id="btnReset">전체 배정 초기화</button>
+  </div>
+</div>
+
+<!-- ================= 관람객 화면 ================= -->
+<div class="dwrap" id="display" hidden>
+  <div class="dhead">
+    <div>
+      <h1>〈어떻게 해야 했을까?〉 공동체 상영 및 GV</h1>
+      <p>9월 17일(목) 19:30 상영 · 메가박스 아트나인 0관</p>
+    </div>
+    <div class="left">남은 좌석<b id="dLeft">92</b></div>
+  </div>
+  <div class="dbody">
+    <div class="dhall" id="dhall">
+      <div class="dscreen"></div>
+      <div class="dscreen-l">SCREEN</div>
+      <div class="drows" id="drows"></div>
+      <div class="dlegend">
+        <span><i></i>빈 좌석</span>
+        <span><i class="t"></i>배정된 좌석</span>
+        <span><i class="m"></i>방금 배정</span>
+      </div>
+    </div>
+    <div class="dnow" id="dnow"></div>
+  </div>
+</div>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="dlg" id="dlg"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =====================================================================
+   설정 — 이 두 줄만 채우면 됩니다.
+   ===================================================================== */
+const GAS_URL   = "";   // 예: https://script.google.com/macros/s/AKfy.../exec
+const GAS_TOKEN = "";   // Apps Script 스크립트 속성 TOKEN 과 같은 값
+/* ===================================================================== */
+
+const ROWS = ["O","P","Q","R","S","T","U","V"];
+const SEATS = [];
+ROWS.forEach(r=>{ const n = r==="V"?8:12; for(let i=1;i<=n;i++) SEATS.push(r+i); });
+const TOTAL = SEATS.length;
+const GROUPS = ["회원","넥스트케어","사무처","정책위원회","현장"];
+const IS_DISPLAY = new URLSearchParams(location.search).get("view") === "display";
+const K_ROSTER = "artnine-roster-2026";
+const K_STATE  = "artnine-seats-2026";
+const K_QUEUE  = "artnine-queue-2026";
+const CH = "artnine-seats-2026";
+
+const state = { roster:[], seats:{}, selected:null, filter:"all", showNames:false, last:null };
+let queue = [];
+
+const $ = s => document.querySelector(s);
+const el = (t,c,txt)=>{const e=document.createElement(t); if(c) e.className=c; if(txt!=null) e.textContent=txt; return e;};
+const seatLabel = id => id ? (id[0] + "열 " + id.slice(1) + "번") : "";
+const personById = pid => state.roster.find(p=>p.id===pid) || null;
+function seatOf(pid){ for(const s in state.seats){ if(state.seats[s] && state.seats[s].pid===pid) return s; } return null; }
+const gasOn = () => !!(GAS_URL && GAS_TOKEN);
+
+/* ---------- 브라우저 저장 ---------- */
+function loadLocal(){
+  try{ const r = JSON.parse(localStorage.getItem(K_ROSTER)||"null"); if(Array.isArray(r)) state.roster = r; }catch(e){}
+  try{ const j = JSON.parse(localStorage.getItem(K_STATE)||"{}");
+       state.seats=j.seats||{}; state.showNames=!!j.showNames; state.last=j.last||null; }catch(e){}
+  try{ const q = JSON.parse(localStorage.getItem(K_QUEUE)||"[]"); if(Array.isArray(q)) queue = q; }catch(e){}
+}
+function saveRosterLocal(){ try{ localStorage.setItem(K_ROSTER, JSON.stringify(state.roster)); }catch(e){} }
+function saveStateLocal(){ try{ localStorage.setItem(K_STATE, JSON.stringify({seats:state.seats, showNames:state.showNames, last:state.last})); }catch(e){} }
+function saveQueue(){ try{ localStorage.setItem(K_QUEUE, JSON.stringify(queue)); }catch(e){} }
+
+/* ---------- 창 사이 동기화 ---------- */
+let bc = null;
+try{ bc = new BroadcastChannel(CH); }catch(e){}
+function broadcast(kind){
+  if(!bc) return;
+  bc.postMessage({kind:kind||"state", roster:state.roster, seats:state.seats, showNames:state.showNames, last:state.last});
+}
+if(bc){
+  bc.onmessage = ev=>{
+    const m = ev.data||{};
+    if(m.kind==="hello"){ if(!IS_DISPLAY) broadcast("state"); return; }
+    if(m.kind==="state"){
+      state.roster=m.roster||[]; state.seats=m.seats||{}; state.showNames=!!m.showNames; state.last=m.last||null;
+      if(IS_DISPLAY){ renderDisplay(); } else { saveRosterLocal(); saveStateLocal(); render(); }
+    }
+  };
+}
+
+/* ---------- 서버 통신 ---------- */
+async function call(payload){
+  const res = await fetch(GAS_URL, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify(Object.assign({token:GAS_TOKEN}, payload))});
+  const j = await res.json();
+  if(!j.ok) throw new Error(j.error||"failed");
+  return j;
+}
+
+/* 대기열: 명단 변경은 순서대로, 좌석 현황은 통째로 한 번에 */
+let flushing=false, seatsDirty=false, seatsTimer=null, failCount=0, lastSavedAt=null;
+function enqueue(op){ queue.push(op); saveQueue(); flush(); }
+function markSeatsDirty(){ seatsDirty = true; clearTimeout(seatsTimer); seatsTimer = setTimeout(flush, 1200); updateStatus(); }
+
+function seatRows(){
+  return SEATS.filter(s=>state.seats[s]).map(s=>{
+    const d = state.seats[s];
+    return [seatLabel(s), s, d.name, d.org||"", d.group||"", d.pid, d.at||""];
+  });
+}
+async function flush(){
+  if(!gasOn() || flushing) return;
+  if(!queue.length && !seatsDirty) return;
+  flushing = true; updateStatus("saving");
+  try{
+    while(queue.length){
+      const op = queue[0];
+      if(op.t==="upsert") await call({action:"rosterUpsert", person:op.p});
+      else if(op.t==="delete") await call({action:"rosterDelete", id:op.id});
+      queue.shift(); saveQueue();
+    }
+    if(seatsDirty){
+      const rows = seatRows();
+      await call({action:"saveSeats", rows:rows});
+      seatsDirty = false;
+    }
+    failCount = 0; lastSavedAt = new Date(); updateStatus();
+  }catch(e){
+    failCount++; updateStatus("offline");
+    clearTimeout(seatsTimer);
+    seatsTimer = setTimeout(flush, Math.min(30000, 3000*failCount));
+  }finally{ flushing = false; }
+}
+function isPending(){ return queue.length>0 || seatsDirty; }
+function updateStatus(kind){
+  const s = $("#syncStatus"); if(!s) return;
+  const t = s.querySelector("span"); s.classList.remove("wait","err");
+  if(!gasOn()){ s.classList.add("err"); t.textContent = "구글 시트 미연결 — 설정이 필요합니다"; return; }
+  if(kind==="offline"){ s.classList.add("err"); t.textContent = "시트 연결 끊김 — 배정은 계속 가능, 연결되면 자동 저장"; return; }
+  if(kind==="saving"){ s.classList.add("wait"); t.textContent = "시트에 저장 중…"; return; }
+  if(isPending()){ s.classList.add("wait"); t.textContent = "저장 대기 중"; return; }
+  const hh = lastSavedAt ? lastSavedAt.toTimeString().slice(0,5) : "";
+  t.textContent = "시트 저장 완료" + (hh ? " ("+hh+")" : "");
+}
+
+/* ---------- 배정 ---------- */
+function commitSeats(){ saveStateLocal(); broadcast("state"); render(); markSeatsDirty(); }
+function commitRoster(){ saveRosterLocal(); broadcast("state"); render(); }
+
+function assignSeat(pid, seatId){
+  const p = personById(pid); if(!p) return;
+  const old = seatOf(pid); if(old===seatId) return;
+  const occ = state.seats[seatId];
+  if(occ && occ.pid!==pid){ toast(seatLabel(seatId)+"은 이미 "+occ.name+" 님 좌석입니다"); return; }
+  if(old) delete state.seats[old];
+  state.seats[seatId] = {pid:pid, name:p.name, org:p.org||"", group:p.group, at:new Date().toISOString()};
+  state.last = {pid:pid, name:p.name, org:p.org||"", seat:seatId, at:Date.now()};
+  commitSeats();
+  toast(old ? (p.name+" 님 좌석을 "+seatLabel(old)+" → "+seatLabel(seatId)+"으로 변경했습니다")
+            : (p.name+" 님 · "+seatLabel(seatId)+" 배정 완료"));
+  showTicket(p, seatId);
+}
+function cancelSeat(pid){
+  const old = seatOf(pid); const p = personById(pid); if(!old) return;
+  delete state.seats[old];
+  if(state.last && state.last.pid===pid) state.last = null;
+  commitSeats();
+  toast((p?p.name:"")+" 님 "+seatLabel(old)+" 배정을 취소했습니다");
+}
+function resetAll(){
+  state.seats={}; state.last=null; state.selected=null;
+  commitSeats(); toast("전체 배정을 초기화했습니다");
+}
+
+/* ---------- 명단 편집 ---------- */
+function savePerson(person){
+  const existing = person.id ? personById(person.id) : null;
+  if(existing){
+    existing.name = person.name; existing.org = person.org; existing.group = person.group;
+    const s = seatOf(existing.id);
+    if(s){ state.seats[s].name = existing.name; state.seats[s].org = existing.org; state.seats[s].group = existing.group; markSeatsDirty(); saveStateLocal(); }
+    enqueue({t:"upsert", p:{id:existing.id, name:existing.name, org:existing.org, group:existing.group}});
+    commitRoster(); toast(existing.name+" 님 정보를 수정했습니다");
+    return existing.id;
+  }
+  const id = "x"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  const p = {id:id, name:person.name, org:person.org, group:person.group};
+  state.roster.push(p);
+  enqueue({t:"upsert", p:p});
+  commitRoster(); toast(p.name+" 님을 명단에 추가했습니다");
+  return id;
+}
+function deletePerson(pid){
+  const p = personById(pid); if(!p) return;
+  const s = seatOf(pid);
+  if(s){ delete state.seats[s]; if(state.last && state.last.pid===pid) state.last=null; saveStateLocal(); markSeatsDirty(); }
+  state.roster = state.roster.filter(x=>x.id!==pid);
+  if(state.selected===pid) state.selected=null;
+  enqueue({t:"delete", id:pid});
+  commitRoster();
+  toast(p.name+" 님을 명단에서 삭제했습니다");
+}
+
+/* ---------- 시트에서 불러오기 ---------- */
+async function bootstrapFromSheet(takeSeats){
+  const j = await call({action:"bootstrap"});
+  state.roster = j.roster || [];
+  saveRosterLocal();
+  if(takeSeats){
+    const seats = {};
+    (j.seats||[]).forEach(s=>{ seats[s.seat] = {pid:s.pid, name:s.name, org:s.org, group:s.group, at:s.at}; });
+    state.seats = seats; state.last = null; state.selected = null;
+    saveStateLocal();
+  }
+  lastSavedAt = new Date();
+  broadcast("state");
+  return j;
+}
+
+/* ---------- 운영자 화면 ---------- */
+function render(){
+  if(IS_DISPLAY) return;
+  const n = Object.keys(state.seats).length;
+  $("#cntAssigned").textContent = n; $("#cntTotal").textContent = TOTAL; $("#cntLeft").textContent = TOTAL-n;
+  $("#tabCount").textContent = "("+state.roster.length+")";
+  renderMap(); renderPerson(); renderList();
+  $("#hall").classList.toggle("names", state.showNames);
+  $("#showNames").checked = state.showNames;
+  updateStatus();
+}
+function renderMap(){
+  const rows = $("#rows"); rows.innerHTML = "";
+  const mySeat = state.selected ? seatOf(state.selected) : null;
+  ROWS.forEach(r=>{
+    const row = el("div","row"); const n = r==="V"?8:12;
+    for(let i=1;i<=12;i++){
+      if(i===7) row.appendChild(el("div","rl",r));
+      const id = r+i; const b = el("button","seat"); b.dataset.seat=id;
+      if(i>n){ b.classList.add("ghost"); b.tabIndex=-1; row.appendChild(b); continue; }
+      const occ = state.seats[id];
+      b.appendChild(el("span",null,String(i)));
+      if(occ){
+        b.classList.add(id===mySeat?"mine":"taken");
+        b.appendChild(el("span","nm",occ.name));
+        b.setAttribute("aria-label", seatLabel(id)+" · "+occ.name);
+        b.title = occ.name+" · "+(occ.org||"");
+      }else{
+        if(state.selected) b.classList.add("pickable");
+        b.setAttribute("aria-label", seatLabel(id)+" · 빈 좌석");
+      }
+      row.appendChild(b);
+    }
+    rows.appendChild(row);
+  });
+}
+function renderPerson(){
+  const box = $("#person");
+  const p = state.selected ? personById(state.selected) : null;
+  if(!p){ box.hidden = true; return; }
+  box.hidden = false;
+  $("#pName").textContent = p.name; $("#pOrg").textContent = p.org || "소속 없음";
+  const t = $("#pTag"); t.textContent = p.group; t.className = "tag g"+p.group;
+  const s = seatOf(p.id);
+  const v = $("#pSeat"); v.textContent = s ? seatLabel(s) : "아직 배정되지 않음"; v.classList.toggle("none", !s);
+  const h = $("#pHint");
+  if(s){ h.textContent = "좌석을 바꾸려면 배치도에서 다른 빈 좌석을 누르세요."; h.classList.remove("act"); }
+  else { h.textContent = "배치도에서 빈 좌석을 눌러 배정하세요."; h.classList.add("act"); }
+  $("#btnCancel").disabled = !s; $("#btnTicket").disabled = !s;
+}
+function renderList(){
+  const tb = $("#tbody"); tb.innerHTML = "";
+  const f = state.filter;
+  let rows = state.roster.map((p,i)=>({p:p, s:seatOf(p.id), i:i+1}));
+  rows = rows.filter(r=>{
+    if(f==="assigned") return !!r.s;
+    if(f==="unassigned") return !r.s;
+    if(f==="기타") return ["사무처","정책위원회","현장"].indexOf(r.p.group)>=0;
+    if(f!=="all") return r.p.group===f;
+    return true;
+  });
+  rows.forEach(r=>{
+    const tr = el("tr","clk");
+    tr.appendChild(el("td",null,String(r.i)));
+    const td = el("td"); td.appendChild(el("span",null,r.p.name)); td.appendChild(el("span","org",r.p.org||"")); tr.appendChild(td);
+    const tg = el("td"); tg.appendChild(el("span","tag g"+r.p.group, r.p.group)); tr.appendChild(tg);
+    tr.appendChild(el("td","seatc"+(r.s?"":" none"), r.s?seatLabel(r.s):"미배정"));
+    const ta = el("td","tools");
+    const be = el("button","btn sm ghost","수정"); be.addEventListener("click",e=>{e.stopPropagation(); openPersonForm(r.p);});
+    const bb = el("button","btn sm", r.s?"변경":"배정"); bb.addEventListener("click",e=>{e.stopPropagation(); selectPerson(r.p.id); switchTab("map");});
+    ta.appendChild(be); ta.appendChild(bb); tr.appendChild(ta);
+    tr.addEventListener("click",()=>{ selectPerson(r.p.id); switchTab("map"); });
+    tb.appendChild(tr);
+  });
+  if(!rows.length){ const tr=el("tr"); const td=el("td",null,"해당하는 참석자가 없습니다"); td.colSpan=5; td.style.color="var(--ink2)"; tr.appendChild(td); tb.appendChild(tr); }
+}
+
+/* ---------- 관람객 화면 ---------- */
+let lastFlash = null;
+function renderDisplay(){
+  $("#dLeft").textContent = TOTAL - Object.keys(state.seats).length;
+  const rows = $("#drows"); rows.innerHTML = "";
+  const fresh = state.last && (Date.now()-state.last.at < 1000*60*3);
+  const flashSeat = fresh ? state.last.seat : null;
+  ROWS.forEach(r=>{
+    const row = el("div","drow"); const n2 = r==="V"?8:12;
+    for(let i=1;i<=12;i++){
+      if(i===7) row.appendChild(el("div","drl",r));
+      const id = r+i; const b = el("div","dseat"); b.dataset.seat=id;
+      if(i>n2){ b.classList.add("ghost"); row.appendChild(b); continue; }
+      const occ = state.seats[id];
+      b.appendChild(el("span",null,String(i)));
+      if(occ){
+        b.classList.add("taken");
+        b.appendChild(el("span","dnm",occ.name));
+        if(id===flashSeat) b.classList.add("flash");
+      }
+      row.appendChild(b);
+    }
+    rows.appendChild(row);
+  });
+  lastFlash = state.last ? state.last.at : null;
+  $("#dhall").classList.toggle("names", state.showNames);
+
+  const now = $("#dnow"); now.innerHTML = "";
+  if(fresh){
+    now.appendChild(el("div","k","방금 배정된 좌석"));
+    now.appendChild(el("div","who", state.last.name+" 님"));
+    now.appendChild(el("div","org", state.last.org||""));
+    now.appendChild(el("div","st", seatLabel(state.last.seat)));
+  }else{
+    now.appendChild(el("div","idle","성함을 말씀해 주시면 좌석을 배정해 드립니다. 배정된 좌석이 이 화면에 표시됩니다."));
+  }
+}
+
+/* ---------- 검색 ---------- */
+const norm = s => (s||"").replace(/\s+/g,"").toLowerCase();
+function search(q){
+  const box = $("#results"); box.innerHTML = "";
+  $("#qClear").classList.toggle("show", !!q);
+  if(!q){ box.classList.remove("show"); return; }
+  const nq = norm(q);
+  const hits = state.roster.filter(p=>norm(p.name).includes(nq) || norm(p.org).includes(nq)).slice(0,30);
+  if(!hits.length){
+    const e = el("div","empty"); e.textContent = "\u201c"+q+"\u201d 님은 명단에 없습니다.";
+    const b = el("button",null,"명단에 추가"); b.addEventListener("click",()=>openPersonForm({name:q, org:"", group:"현장"})); e.appendChild(b);
+    box.appendChild(e);
+  }else{
+    hits.forEach((p,i)=>{
+      const b = el("button"); if(i===0) b.classList.add("hl"); b.setAttribute("role","option");
+      const s = seatOf(p.id);
+      b.appendChild(el("span","n",p.name)); b.appendChild(el("span","o",p.org||""));
+      b.appendChild(el("span","s"+(s?" has":""), s?seatLabel(s):"미배정"));
+      b.addEventListener("click",()=>selectPerson(p.id));
+      box.appendChild(b);
+    });
+  }
+  box.classList.add("show");
+}
+function selectPerson(pid){
+  state.selected = pid;
+  $("#q").value=""; $("#results").classList.remove("show"); $("#qClear").classList.remove("show");
+  render();
+}
+
+/* ---------- 이벤트 ---------- */
+function bindOperator(){
+  $("#q").addEventListener("input", e=>search(e.target.value.trim()));
+  $("#q").addEventListener("keydown", e=>{
+    if(e.key==="Enter"){ const f = $("#results button.hl") || $("#results button[role=option]"); if(f){ f.click(); e.preventDefault(); } }
+    if(e.key==="Escape"){ $("#q").value=""; search(""); }
+  });
+  $("#qClear").addEventListener("click", ()=>{ $("#q").value=""; search(""); $("#q").focus(); });
+
+  $("#rows").addEventListener("click", e=>{
+    const b = e.target.closest(".seat"); if(!b || b.classList.contains("ghost")) return;
+    const id = b.dataset.seat; const occ = state.seats[id];
+    if(occ){ openOccupant(id, occ); return; }
+    if(!state.selected){ toast("먼저 참석자 성함을 검색해 선택하세요"); $("#q").focus(); return; }
+    const p = personById(state.selected); const old = seatOf(p.id);
+    if(old) confirmDlg({title:"좌석을 변경할까요?", body:p.name+" 님의 좌석을 "+seatLabel(old)+"에서 "+seatLabel(id)+"으로 바꿉니다.", ok:"변경", onOk:()=>assignSeat(p.id,id)});
+    else confirmDlg({title:"이 좌석으로 배정할까요?", body:p.name+" 님 ("+(p.org||"소속 없음")+")", big:seatLabel(id), ok:"배정", onOk:()=>assignSeat(p.id,id)});
+  });
+  $("#showNames").addEventListener("change", e=>{ state.showNames = e.target.checked; saveStateLocal(); broadcast("state"); render(); });
+
+  $("#btnCancel").addEventListener("click", ()=>{
+    const p = personById(state.selected); const s = seatOf(p.id); if(!s) return;
+    confirmDlg({title:"배정을 취소할까요?", body:p.name+" 님의 "+seatLabel(s)+" 배정을 취소하고 빈 좌석으로 되돌립니다.", ok:"배정 취소", danger:true, onOk:()=>cancelSeat(p.id)});
+  });
+  $("#btnTicket").addEventListener("click", ()=>{ const p=personById(state.selected); const s=seatOf(p.id); if(s) showTicket(p,s); });
+  $("#btnEditPerson").addEventListener("click", ()=>{ const p=personById(state.selected); if(p) openPersonForm(p); });
+  $("#btnDeselect").addEventListener("click", ()=>{ state.selected=null; render(); $("#q").focus(); });
+
+  document.querySelectorAll('.tabs [role=tab]').forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+  document.querySelectorAll('.chip').forEach(c=>c.addEventListener("click",()=>{
+    document.querySelectorAll('.chip').forEach(x=>x.setAttribute("aria-pressed","false"));
+    c.setAttribute("aria-pressed","true"); state.filter=c.dataset.f; renderList();
+  }));
+
+  $("#btnAddPerson").addEventListener("click", ()=>openPersonForm({name:"", org:"", group:"현장"}));
+  $("#btnDisplay").addEventListener("click", ()=>{
+    const w = window.open(location.pathname+"?view=display", "artnine-display", "width=1280,height=800");
+    if(!w) toast("팝업이 차단됐습니다. 주소창의 팝업 허용을 켜주세요");
+    else setTimeout(()=>broadcast("state"), 600);
+  });
+  $("#btnPull").addEventListener("click", ()=>{
+    if(isPending()){ toast("저장 대기 중인 변경이 있습니다. 잠시 후 다시 시도하세요"); return; }
+    confirmDlg({title:"시트에서 새로고침할까요?", body:"명단과 배정 현황을 구글 시트의 내용으로 다시 맞춥니다.", ok:"새로고침", onOk:async()=>{
+      toast("불러오는 중…");
+      try{ await bootstrapFromSheet(true); render(); toast("명단 "+state.roster.length+"명, 배정 "+Object.keys(state.seats).length+"건을 불러왔습니다"); }
+      catch(e){ toast("불러오지 못했습니다: "+e.message); }
+    }});
+  });
+  $("#btnExport").addEventListener("click", exportCsv);
+  $("#btnReset").addEventListener("click", openReset);
+  window.addEventListener("beforeunload", e=>{ if(isPending()){ e.preventDefault(); e.returnValue=""; } });
+  window.addEventListener("online", ()=>flush());
+}
+function switchTab(name){
+  document.querySelectorAll('.tabs [role=tab]').forEach(b=>b.setAttribute("aria-selected", String(b.dataset.tab===name)));
+  $("#tab-map").hidden = name!=="map"; $("#tab-list").hidden = name!=="list";
+}
+
+/* ---------- CSV ---------- */
+function exportCsv(){
+  const lines = [["연번","ID","성함","소속","구분","좌석","좌석코드","배정시각"]];
+  state.roster.forEach((p,i)=>{ const s=seatOf(p.id); const d=s?state.seats[s]:null; lines.push([i+1,p.id,p.name,p.org||"",p.group,s?seatLabel(s):"",s||"",d?d.at:""]); });
+  lines.push([]); lines.push(["좌석순"]); lines.push(["좌석","성함","소속","구분"]);
+  SEATS.forEach(s=>{ const d=state.seats[s]; if(d) lines.push([seatLabel(s),d.name,d.org||"",d.group]); });
+  const csv = "\uFEFF" + lines.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+  a.download = "좌석배정_어떻게해야했을까.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  toast("CSV를 내려받았습니다");
+}
+
+/* ---------- 모달 ---------- */
+const modal = $("#modal"), dlg = $("#dlg");
+function closeModal(){ modal.classList.remove("show"); dlg.innerHTML=""; }
+modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape" && modal.classList.contains("show")) closeModal(); });
+
+function confirmDlg(o){
+  dlg.innerHTML = "";
+  dlg.appendChild(el("h2",null,o.title));
+  if(o.big) dlg.appendChild(el("div","big",o.big));
+  if(o.body) dlg.appendChild(el("p",null,o.body));
+  const a = el("div","actions");
+  const c = el("button","btn","돌아가기"); c.addEventListener("click",closeModal);
+  const ok = el("button","btn "+(o.danger?"danger":"primary"), o.ok);
+  ok.addEventListener("click",()=>{ closeModal(); o.onOk(); });
+  a.appendChild(c); a.appendChild(ok); dlg.appendChild(a);
+  modal.classList.add("show"); ok.focus();
+}
+function showTicket(p, seatId){
+  dlg.innerHTML = "";
+  dlg.appendChild(el("h2",null,"배정 완료"));
+  const t = el("div","ticket");
+  t.appendChild(el("div","t1","〈어떻게 해야 했을까?〉 공동체 상영 및 GV"));
+  t.appendChild(el("div","t2",p.name+" 님"));
+  t.appendChild(el("div","t3",seatLabel(seatId)));
+  t.appendChild(el("div","t4","9월 17일(목) 19:30 · 메가박스 아트나인 0관"));
+  dlg.appendChild(t);
+  const a = el("div","actions");
+  const c = el("button","btn primary","닫기"); c.addEventListener("click",closeModal);
+  a.appendChild(c); dlg.appendChild(a);
+  modal.classList.add("show"); c.focus();
+}
+function openOccupant(seatId, occ){
+  dlg.innerHTML = "";
+  dlg.appendChild(el("h2",null,seatLabel(seatId)));
+  dlg.appendChild(el("p",null,occ.name+" 님 ("+(occ.org||"소속 없음")+") 좌석입니다."));
+  const a = el("div","actions");
+  const c = el("button","btn","닫기"); c.addEventListener("click",closeModal);
+  const chg = el("button","btn","이분 좌석 변경");
+  chg.addEventListener("click",()=>{ closeModal(); selectPerson(occ.pid); toast(occ.name+" 님을 선택했습니다. 옮길 빈 좌석을 누르세요"); });
+  const cx = el("button","btn danger","배정 취소");
+  cx.addEventListener("click",()=>{ closeModal(); confirmDlg({title:"배정을 취소할까요?", body:occ.name+" 님의 "+seatLabel(seatId)+" 배정을 취소합니다.", ok:"배정 취소", danger:true, onOk:()=>cancelSeat(occ.pid)}); });
+  a.appendChild(c); a.appendChild(chg); a.appendChild(cx); dlg.appendChild(a);
+  modal.classList.add("show");
+}
+
+/* 참석자 추가 / 수정 */
+function openPersonForm(p){
+  const editing = !!(p && p.id);
+  dlg.innerHTML = "";
+  dlg.appendChild(el("h2",null, editing ? "참석자 정보 수정" : "참석자 추가"));
+  dlg.appendChild(el("p",null, "구글 시트 명단에도 함께 반영됩니다."));
+
+  dlg.appendChild(el("label",null,"성함"));
+  const n = el("input"); n.value = (p&&p.name)||""; n.placeholder="성함"; dlg.appendChild(n);
+
+  dlg.appendChild(el("label",null,"소속"));
+  const o = el("input"); o.value = (p&&p.org)||""; o.placeholder="소속(선택)"; dlg.appendChild(o);
+
+  dlg.appendChild(el("label",null,"구분"));
+  const g = el("select");
+  GROUPS.forEach(v=>{ const op = el("option",null,v); op.value=v; if((p&&p.group)===v) op.selected=true; g.appendChild(op); });
+  dlg.appendChild(g);
+
+  const a = el("div","actions");
+  if(editing){
+    const del = el("button","btn danger","삭제");
+    del.style.marginRight="auto";
+    del.addEventListener("click",()=>{
+      const s = seatOf(p.id);
+      closeModal();
+      confirmDlg({title:"명단에서 삭제할까요?", danger:true, ok:"삭제",
+        body: p.name+" 님을 명단에서 지웁니다." + (s ? " 배정된 "+seatLabel(s)+"도 함께 취소됩니다." : ""),
+        onOk:()=>deletePerson(p.id)});
+    });
+    a.appendChild(del);
+  }
+  const c = el("button","btn","돌아가기"); c.addEventListener("click",closeModal);
+  const ok = el("button","btn primary", editing?"저장":"추가하고 선택");
+  const submit = ()=>{
+    const nm = n.value.trim(); if(!nm){ n.focus(); return; }
+    closeModal();
+    const id = savePerson({id: editing?p.id:null, name:nm, org:o.value.trim(), group:g.value});
+    if(!editing){ selectPerson(id); switchTab("map"); }
+  };
+  ok.addEventListener("click", submit);
+  n.addEventListener("keydown", e=>{ if(e.key==="Enter") submit(); });
+  o.addEventListener("keydown", e=>{ if(e.key==="Enter") submit(); });
+  a.appendChild(c); a.appendChild(ok); dlg.appendChild(a);
+  modal.classList.add("show"); n.focus(); n.select();
+}
+function openReset(){
+  dlg.innerHTML = "";
+  dlg.appendChild(el("h2",null,"전체 배정을 초기화할까요?"));
+  dlg.appendChild(el("p",null,"현재 배정된 "+Object.keys(state.seats).length+"석이 모두 빈 좌석으로 돌아갑니다. 명단은 그대로 둡니다. 확인을 위해 \u201c초기화\u201d를 입력하세요."));
+  const i = el("input"); i.placeholder="초기화"; dlg.appendChild(i);
+  const a = el("div","actions");
+  const c = el("button","btn","돌아가기"); c.addEventListener("click",closeModal);
+  const ok = el("button","btn danger","초기화"); ok.disabled=true;
+  i.addEventListener("input",()=>{ ok.disabled = i.value.trim()!=="초기화"; });
+  ok.addEventListener("click",()=>{ closeModal(); resetAll(); });
+  a.appendChild(c); a.appendChild(ok); dlg.appendChild(a);
+  modal.classList.add("show"); i.focus();
+}
+
+/* ---------- 토스트 ---------- */
+let toastT;
+function toast(msg){ if(IS_DISPLAY) return; const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"), 2600); }
+
+/* ---------- 시작 ---------- */
+function showBlocker(title, msg, retry){
+  $("#app").hidden = true;
+  const b = $("#blocker"); b.hidden = false;
+  $("#blkTitle").textContent = title; $("#blkMsg").textContent = msg;
+  $("#blkRetry").hidden = !retry;
+}
+function showApp(){ $("#blocker").hidden = true; $("#app").hidden = false; }
+
+async function boot(){
+  loadLocal();
+
+  if(IS_DISPLAY){
+    document.body.classList.add("display");
+    document.title = "좌석표 — 어떻게 해야 했을까?";
+    $("#display").hidden = false;
+    renderDisplay();
+    broadcast("hello");
+    setInterval(()=>{ if(state.last && Date.now()-state.last.at > 1000*60*3) renderDisplay(); }, 20000);
+    return;
+  }
+
+  bindOperator();
+
+  if(!gasOn()){
+    showBlocker("구글 시트 연결이 필요합니다",
+      "명단은 구글 스프레드시트에 저장됩니다. index.html 위쪽의 GAS_URL 과 GAS_TOKEN 두 줄을 채운 뒤 다시 배포해 주세요. 설정 방법은 README.md에 있습니다.", false);
+    return;
+  }
+
+  if(state.roster.length){
+    showApp(); render();
+    $("#banner").textContent = "저장된 명단으로 먼저 열었습니다. 시트와 맞추는 중…";
+    $("#banner").classList.add("show");
+  }else{
+    showBlocker("명단을 불러오는 중입니다", "구글 시트에서 참석자 명단을 읽고 있습니다.", false);
+  }
+
+  try{
+    const hadSeats = Object.keys(state.seats).length > 0;
+    await flush();
+    await bootstrapFromSheet(!hadSeats && !isPending());
+    showApp(); render();
+    $("#banner").classList.remove("show");
+    if(!state.roster.length){
+      $("#banner").textContent = "시트의 '명단' 탭이 비어 있습니다. 명단.csv를 붙여넣거나, 아래 '참석자 추가'로 직접 넣어 주세요.";
+      $("#banner").classList.add("show");
+    }
+  }catch(e){
+    if(state.roster.length){
+      showApp(); render();
+      $("#banner").textContent = "시트에 연결하지 못했습니다("+e.message+"). 저장된 명단으로 계속 진행합니다. 연결되면 자동으로 맞춰집니다.";
+      $("#banner").classList.add("show");
+    }else{
+      showBlocker("명단을 불러오지 못했습니다",
+        "구글 시트에 연결하지 못했습니다 ("+e.message+"). 인터넷 연결과 GAS_URL / TOKEN 설정을 확인한 뒤 다시 시도해 주세요.", true);
+    }
+  }
+}
+$("#blkRetry").addEventListener("click", ()=>location.reload());
+boot();
+</script>
+</body>
+</html>
