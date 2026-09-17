@@ -333,7 +333,7 @@ body.display{background:#0E121B;color:#F2F4F8;overflow:hidden}
    설정 — 이 두 줄만 채우면 됩니다.
    ===================================================================== */
 const GAS_URL   = "https://script.google.com/macros/s/AKfycbwc2FXOSJe1K4UZrlHO03cEE8wNOh7tptuYYGg2zk2vyLyf-V0oc6v2wH6lF_8vR6kHDw/exec";   // 예: https://script.google.com/macros/s/AKfy.../exec
-const GAS_TOKEN = "@sasw1986";   // Apps Script 스크립트 속성 TOKEN 과 같은 값
+const GAS_TOKEN = "";   // Apps Script 스크립트 속성 TOKEN 과 같은 값
 /* ===================================================================== */
 
 const ROWS = ["O","P","Q","R","S","T","U","V"];
@@ -341,6 +341,7 @@ const SEATS = [];
 ROWS.forEach(r=>{ const n = r==="V"?8:12; for(let i=1;i<=n;i++) SEATS.push(r+i); });
 const TOTAL = SEATS.length;
 const GROUPS = ["회원","넥스트케어","사무처","정책위원회","현장"];
+const HOLD_MS = 10000;   // 관람객 화면에서 성함·좌석을 보여주는 시간(밀리초)
 const IS_DISPLAY = new URLSearchParams(location.search).get("view") === "display";
 const K_ROSTER = "artnine-roster-2026";
 const K_STATE  = "artnine-seats-2026";
@@ -592,11 +593,11 @@ function renderList(){
 }
 
 /* ---------- 관람객 화면 ---------- */
-let lastFlash = null;
+let holdTimer = null;
 function renderDisplay(){
   $("#dLeft").textContent = TOTAL - Object.keys(state.seats).length;
   const rows = $("#drows"); rows.innerHTML = "";
-  const fresh = state.last && (Date.now()-state.last.at < 1000*60*3);
+  const fresh = state.last && (Date.now()-state.last.at < HOLD_MS);
   const flashSeat = fresh ? state.last.seat : null;
   ROWS.forEach(r=>{
     const row = el("div","drow"); const n2 = r==="V"?8:12;
@@ -615,8 +616,11 @@ function renderDisplay(){
     }
     rows.appendChild(row);
   });
-  lastFlash = state.last ? state.last.at : null;
   $("#dhall").classList.toggle("names", state.showNames);
+
+  // 보여주는 시간이 지나면 이름을 지우고 좌석 강조도 함께 풉니다
+  clearTimeout(holdTimer);
+  if(fresh) holdTimer = setTimeout(renderDisplay, HOLD_MS - (Date.now()-state.last.at) + 60);
 
   const now = $("#dnow"); now.innerHTML = "";
   if(fresh){
@@ -859,7 +863,6 @@ async function boot(){
     $("#display").hidden = false;
     renderDisplay();
     broadcast("hello");
-    setInterval(()=>{ if(state.last && Date.now()-state.last.at > 1000*60*3) renderDisplay(); }, 20000);
     return;
   }
 
